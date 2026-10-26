@@ -315,14 +315,26 @@ class AvarmaHeizregler extends IPSModule
         $this->ensureProfiles();
 
         // Variablen laut Auswahltabelle anlegen bzw. entfernen
-        $write = $this->ReadPropertyBoolean('EnableParamWrite');
+        $write   = $this->ReadPropertyBoolean('EnableParamWrite');
+        $active  = 0;
+        $removed = [];
         foreach ($this->catalog() as $row) {
             $ident = $row['Ident'];
             $keep  = $this->isActive($ident);
-            $this->MaintainVariable($ident, $row['VarName'], $row['Type'], $row['Profile'], $row['Pos'], $keep);
             if (!$keep) {
+                $vid = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
+                if ($vid !== false) {
+                    $this->UnregisterVariable($ident);
+                    // Fallback, falls die Variable nicht vom Modul selbst angelegt wurde
+                    if (@IPS_GetObjectIDByIdent($ident, $this->InstanceID) !== false) {
+                        IPS_DeleteVariable($vid);
+                    }
+                    $removed[] = $ident;
+                }
                 continue;
             }
+            $active++;
+            $this->MaintainVariable($ident, $row['VarName'], $row['Type'], $row['Profile'], $row['Pos'], true);
             if ($row['Group'] === 'Parameter' || $row['Group'] === 'Parameter erweitert') {
                 if ($write && $row['Writable'] && $this->isWrite($ident)) {
                     $this->EnableAction($ident);
@@ -334,6 +346,8 @@ class AvarmaHeizregler extends IPSModule
             }
         }
         $this->RegisterVariableBoolean('Online', 'Verbindung OK', '', 99);
+        $this->LogMessage(sprintf('Auswahl: %d Datenpunkte aktiv, %d entfernt%s', $active, count($removed),
+            empty($removed) ? '' : ' (' . implode(', ', $removed) . ')'), KL_MESSAGE);
 
         // Heizregler-Variablen nur bei aktivierter Funktion
         $ctl = $this->ReadPropertyBoolean('EnableControl');
