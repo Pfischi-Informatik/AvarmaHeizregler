@@ -30,7 +30,7 @@
             "type": "ExpansionPanel",
             "caption": "Datenpunkte (Auswahl der Variablen)",
             "items": [
-                { "type": "Label", "caption": "Aktiv = Variable anlegen. Abwählen löscht die Variable samt Archivdaten. Schreiben = Parameter darf aus Symcon geschrieben werden (nur bei Bereich ≠ \"nur lesen\"). \"Heizregler: immer aktiv\" = wird bei eingeschaltetem Heizregler unabhängig vom Haken angelegt. Änderungen erst mit \"Übernehmen\" wirksam." },
+                { "type": "Label", "caption": "Aktiv = Variable anlegen. Abwählen löscht die Variable samt Archivdaten. Schreiben = Parameter darf aus Symcon geschrieben werden (nur bei Bereich ≠ \"nur lesen\"). \"Heizregler: immer aktiv\" (grün bei eingeschaltetem Heizregler) = wird unabhängig vom Haken angelegt. Änderungen erst mit \"Übernehmen\" wirksam." },
                 {
                     "type": "List",
                     "name": "Selection",
@@ -46,7 +46,7 @@
                         { "caption": "Bereich", "name": "Range", "width": "120px" },
                         { "caption": "Schreiben", "name": "Write", "width": "90px", "edit": { "type": "CheckBox" } },
                         { "caption": "Hinweis", "name": "Note", "width": "180px" },
-                        { "caption": "Ident", "name": "Ident", "width": "170px" }
+                        { "caption": "Ident", "name": "Ident", "width": "170px", "save": true }
                     ]
                 }
             ]

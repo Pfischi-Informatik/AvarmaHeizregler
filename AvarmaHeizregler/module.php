@@ -1155,28 +1155,24 @@ class AvarmaHeizregler extends IPSModule
         return sprintf('0x%04X (%d)', $addr, $addr + 1);
     }
 
-    /** Zeilen fuer die Tabelle (= gespeicherter Property-Inhalt) */
+    /**
+     * Gespeicherter Property-Inhalt: pro Zeile nur Active, Write, Ident.
+     * Symcon speichert aus der Tabelle nur bearbeitbare Spalten bzw.
+     * Spalten mit "save": true (hier Ident). Anzeigetexte kommen per
+     * GetConfigurationForm aus "values".
+     */
     private function defaultSelection(): array
     {
         $out = [];
         foreach ($this->catalog() as $r) {
-            $out[] = $this->listRow($r, $r['Default'], false);
+            $out[] = $this->storedRow($r, $r['Default'], false);
         }
         return $out;
     }
 
-    private function listRow(array $r, bool $active, bool $write): array
+    private function storedRow(array $r, bool $active, bool $write): array
     {
-        return [
-            'Active'  => $active,
-            'Name'    => $r['VarName'],
-            'Group'   => $r['Group'],
-            'Address' => $r['Address'],
-            'Range'   => $r['Range'],
-            'Write'   => $r['Writable'] ? $write : false,
-            'Note'    => in_array($r['Ident'], self::CONTROL_REQUIRED, true) ? 'Heizregler: immer aktiv' : '',
-            'Ident'   => $r['Ident'],
-        ];
+        return ['Active' => $active, 'Write' => $r['Writable'] ? $write : false, 'Ident' => $r['Ident']];
     }
 
     /** Ident => ['Active' => bool, 'Write' => bool]; neue Katalogeintraege mit Standardwert */
@@ -1185,14 +1181,17 @@ class AvarmaHeizregler extends IPSModule
         if ($this->selCache !== null) {
             return $this->selCache;
         }
-        $stored = [];
-        foreach (json_decode($this->ReadPropertyString('Selection'), true) ?: [] as $row) {
-            if (isset($row['Ident'])) {
-                $stored[$row['Ident']] = $row;
+        $catalog = $this->catalog();
+        $stored  = [];
+        foreach (array_values(json_decode($this->ReadPropertyString('Selection'), true) ?: []) as $i => $row) {
+            // Zeilen ohne Ident (aeltere Speicherung) ueber die Position zuordnen
+            $ident = $row['Ident'] ?? ($catalog[$i]['Ident'] ?? null);
+            if ($ident !== null) {
+                $stored[$ident] = $row;
             }
         }
         $sel = [];
-        foreach ($this->catalog() as $r) {
+        foreach ($catalog as $r) {
             $s                 = $stored[$r['Ident']] ?? null;
             $sel[$r['Ident']] = [
                 'Active' => $s === null ? $r['Default'] : (bool) ($s['Active'] ?? false),
@@ -1225,6 +1224,46 @@ class AvarmaHeizregler extends IPSModule
         return false;
     }
 
+    /** Anzeigetexte der Tabelle liefern; Haken kommen aus der gespeicherten Property. */
+    public function GetConfigurationForm()
+    {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $sel  = $this->selection();
+        $ctl  = $this->ReadPropertyBoolean('EnableControl');
+        $rows = [];
+        foreach ($this->catalog() as $r) {
+            $req = in_array($r['Ident'], self::CONTROL_REQUIRED, true);
+            $row = [
+                'Active'  => $sel[$r['Ident']]['Active'],
+                'Name'    => $r['VarName'],
+                'Group'   => $r['Group'],
+                'Address' => $r['Address'],
+                'Range'   => $r['Range'],
+                'Write'   => $sel[$r['Ident']]['Write'],
+                'Note'    => $req ? 'Heizregler: immer aktiv' : '',
+                'Ident'   => $r['Ident'],
+            ];
+            if ($req && $ctl) {
+                $row['rowColor'] = '#DFF0D8';
+            }
+            $rows[] = $row;
+        }
+        $this->injectValues($form['elements'], 'Selection', $rows);
+        return json_encode($form);
+    }
+
+    private function injectValues(array &$elements, string $name, array $values): void
+    {
+        foreach ($elements as &$el) {
+            if (($el['name'] ?? '') === $name) {
+                $el['values'] = $values;
+            }
+            if (isset($el['items']) && is_array($el['items'])) {
+                $this->injectValues($el['items'], $name, $values);
+            }
+        }
+    }
+
     /**
      * Gespeicherte Tabelle mit dem Katalog abgleichen (neue/entfernte
      * Datenpunkte nach einem Modulupdate). Die Tabelle wird von Symcon aus
@@ -1234,23 +1273,18 @@ class AvarmaHeizregler extends IPSModule
      */
     private function normalizeSelection(): bool
     {
-        $stored = json_decode($this->ReadPropertyString('Selection'), true) ?: [];
-        $have   = array_column($stored, 'Ident');
+        $stored = array_values(json_decode($this->ReadPropertyString('Selection'), true) ?: []);
+        $have   = array_map(function ($row) {
+            return $row['Ident'] ?? null;
+        }, $stored);
         $want   = array_column($this->catalog(), 'Ident');
-        $noteOk = true;
-        foreach ($stored as $row) {
-            if (!array_key_exists('Note', $row)) {
-                $noteOk = false;
-                break;
-            }
-        }
-        if ($have === $want && $noteOk) {
+        if ($have === $want) {
             return false;
         }
         $sel  = $this->selection();
         $rows = [];
         foreach ($this->catalog() as $r) {
-            $rows[] = $this->listRow($r, $sel[$r['Ident']]['Active'], $sel[$r['Ident']]['Write']);
+            $rows[] = $this->storedRow($r, $sel[$r['Ident']]['Active'], $sel[$r['Ident']]['Write']);
         }
         IPS_SetProperty($this->InstanceID, 'Selection', json_encode($rows));
         IPS_ApplyChanges($this->InstanceID);
