@@ -258,10 +258,10 @@ class AvarmaHeizregler extends IPSModule
         $this->RegisterPropertyInteger('Timeout', 3);
         $this->RegisterPropertyBoolean('EnablePolling', true);
         $this->RegisterPropertyInteger('PollInterval', 30);
-        $this->RegisterPropertyBoolean('ReadParams', true);
         $this->RegisterPropertyInteger('ParamInterval', 600);
-        $this->RegisterPropertyBoolean('ReadParamsExt', false);
         $this->RegisterPropertyBoolean('EnableParamWrite', false);
+        // Auswahltabelle: welche Variablen angelegt / beschrieben werden
+        $this->RegisterPropertyString('Selection', json_encode($this->defaultSelection()));
         $this->RegisterPropertyBoolean('SyncP01', true);
         $this->RegisterPropertyInteger('WriteDelay', 5);
         $this->RegisterPropertyInteger('WriteRetries', 3);
@@ -310,22 +310,28 @@ class AvarmaHeizregler extends IPSModule
     public function ApplyChanges()
     {
         parent::ApplyChanges();
+        $this->selCache = null;
 
         $this->ensureProfiles();
 
-        // Steuer- und Betriebswerte
-        $this->RegisterVariableInteger('Mode', 'Betriebsmodus', 'AVARMA.Mode', 1);
-        $this->EnableAction('Mode');
-        $pos = 2;
-        foreach (self::SETPOINTS as [$ident, $name, $reg, $profile, $min, $max]) {
-            $this->RegisterVariableInteger($ident, $name, $profile, $pos++);
-            if ($min !== null) {
+        // Variablen laut Auswahltabelle anlegen bzw. entfernen
+        $write = $this->ReadPropertyBoolean('EnableParamWrite');
+        foreach ($this->catalog() as $row) {
+            $ident = $row['Ident'];
+            $keep  = $this->isActive($ident);
+            $this->MaintainVariable($ident, $row['VarName'], $row['Type'], $row['Profile'], $row['Pos'], $keep);
+            if (!$keep) {
+                continue;
+            }
+            if ($row['Group'] === 'Parameter' || $row['Group'] === 'Parameter erweitert') {
+                if ($write && $row['Writable'] && $this->isWrite($ident)) {
+                    $this->EnableAction($ident);
+                } else {
+                    $this->DisableAction($ident);
+                }
+            } elseif ($row['Writable']) {
                 $this->EnableAction($ident);
             }
-        }
-        $pos = 100;
-        foreach (array_merge(self::SENSORS, self::STATS) as [$ident, $name, $addr, $factor, $profile, $signed]) {
-            $this->registerTyped($ident, $name, $factor == 1, $profile, $pos++);
         }
         $this->RegisterVariableBoolean('Online', 'Verbindung OK', '', 99);
 
@@ -342,14 +348,6 @@ class AvarmaHeizregler extends IPSModule
         $this->MaintainVariable('LockUntil', 'Taktsperre bis', VARIABLETYPE_INTEGER, '~UnixTimestamp', 908, $ctl);
         if ($ctl) {
             $this->EnableAction('Active');
-        }
-
-        // Schreibrecht der Parameter-Variablen an die Checkbox anpassen
-        foreach (array_merge(self::PARAMS, self::PARAMS_EXT) as $def) {
-            $vid = @$this->GetIDForIdent($this->paramIdent($def[0]));
-            if ($vid !== false && $vid > 0) {
-                $this->setParamAction($def);
-            }
         }
 
         if (trim($this->ReadPropertyString('Host')) === '') {
@@ -464,6 +462,10 @@ class AvarmaHeizregler extends IPSModule
                 echo sprintf('P%02d %s ist schreibgeschuetzt', $n, $label);
                 return;
             }
+            if (!$this->isWrite($Ident)) {
+                echo sprintf('P%02d %s: in der Auswahltabelle ist "Schreiben" nicht angehakt', $n, $label);
+                return;
+            }
             $val = (float) $Value;
             if ($val < $min || $val > $max) {
                 echo sprintf('P%02d %s: %s ausserhalb %s-%s', $n, $label, $val, $min, $max);
@@ -510,7 +512,7 @@ class AvarmaHeizregler extends IPSModule
             $ctrl = $this->readBlock(0x1000, 6);
             if ($ctrl !== null) {
                 foreach (self::SETPOINTS as [$ident, $name, $reg, $profile, $min, $max]) {
-                    if (isset($ctrl[$reg]) && !in_array($ident, $skip, true)) {
+                    if (isset($ctrl[$reg]) && !in_array($ident, $skip, true) && $this->isActive($ident)) {
                         $this->SetValue($ident, $this->signed($ctrl[$reg]));
                     }
                 }
@@ -531,16 +533,19 @@ class AvarmaHeizregler extends IPSModule
 
             // 4. Parameter
             $params = null;
-            $due    = $this->ReadPropertyBoolean('ReadParams')
-                && time() - $this->ReadAttributeInteger('LastParamRead') >= $this->ReadPropertyInteger('ParamInterval');
-            if ($forceParams || $due || $res['params']) {
-                usleep(100000);
-                $params = $this->readBlock(0x2001, 0x6F);
-                if ($params !== null) {
-                    $this->applyParams(self::PARAMS, $params, $skip);
-                    $this->WriteAttributeInteger('LastParamRead', time());
+            $anyStd = $this->anyActive(self::PARAMS);
+            $anyExt = $this->anyActive(self::PARAMS_EXT);
+            $due    = time() - $this->ReadAttributeInteger('LastParamRead') >= $this->ReadPropertyInteger('ParamInterval');
+            if (($anyStd || $anyExt) && ($forceParams || $due || $res['params'])) {
+                if ($anyStd || $res['params']) {
+                    usleep(100000);
+                    $params = $this->readBlock(0x2001, 0x6F);
+                    if ($params !== null) {
+                        $this->applyParams(self::PARAMS, $params, $skip);
+                    }
                 }
-                if ($this->ReadPropertyBoolean('ReadParamsExt')) {
+                $this->WriteAttributeInteger('LastParamRead', time());
+                if ($anyExt) {
                     usleep(100000);
                     $ext = $this->readBlock(0x2070, 0x17);
                     if ($ext !== null) {
@@ -558,7 +563,7 @@ class AvarmaHeizregler extends IPSModule
             }
 
             // 6. Betriebsmodus zurueckrechnen
-            if ($ctrl !== null && !in_array('Mode', $skip, true)) {
+            if ($ctrl !== null && !in_array('Mode', $skip, true) && $this->isActive('Mode')) {
                 usleep(80000);
                 $otc = $params[self::REG_P19] ?? $this->readOne(self::REG_P19);
                 $m   = $this->matchMode($ctrl[self::REG_MODE], $otc);
@@ -571,7 +576,7 @@ class AvarmaHeizregler extends IPSModule
             if ($raw !== null && $stat !== null && $this->controlActive()) {
                 $this->control();
             } elseif ($raw !== null) {
-                $this->WriteAttributeInteger('LastFreq', (int) $this->GetValue('C15_CompFreq'));
+                $this->WriteAttributeInteger('LastFreq', (int) $raw[0x1115]);
             }
         } finally {
             if (is_resource($this->fp)) {
@@ -1056,19 +1061,10 @@ class AvarmaHeizregler extends IPSModule
         return $v > 32767 ? $v - 65536 : $v;
     }
 
-    private function registerTyped(string $ident, string $name, bool $int, string $profile, int $pos): void
-    {
-        if ($int) {
-            $this->RegisterVariableInteger($ident, $name, $profile, $pos);
-        } else {
-            $this->RegisterVariableFloat($ident, $name, $profile, $pos);
-        }
-    }
-
     private function applyDefs(array $defs, array $raw): void
     {
         foreach ($defs as [$ident, $name, $addr, $factor, $profile, $signed]) {
-            if (!isset($raw[$addr])) {
+            if (!isset($raw[$addr]) || !$this->isActive($ident)) {
                 continue;
             }
             $v = $signed ? $this->signed($raw[$addr]) : $raw[$addr];
@@ -1081,6 +1077,166 @@ class AvarmaHeizregler extends IPSModule
         return sprintf('P%03d', $nr);
     }
 
+    // =====================================================================
+    // Auswahltabelle
+    // =====================================================================
+
+    /** Vom Heizregler benoetigt - bei aktivem Regler immer angelegt */
+    private const CONTROL_REQUIRED = [
+        'Mode', 'P02_HeatSet', 'C02_Ambient', 'C07_WaterIn', 'C08_WaterOut',
+        'C11_DeltaT', 'C15_CompFreq', 'S4612_RunningMode',
+    ];
+
+    /** @var array|null Auswahl-Cache fuer diesen Aufruf */
+    private $selCache = null;
+
+    /** Alle verfuegbaren Datenpunkte mit Anzeige- und Variablendaten. */
+    private function catalog(): array
+    {
+        $rows = [];
+        $rows[] = [
+            'Ident' => 'Mode', 'VarName' => 'Betriebsmodus', 'Group' => 'Steuerung',
+            'Address' => '0x1001 (4098)', 'Range' => 'Modusliste', 'Type' => VARIABLETYPE_INTEGER,
+            'Profile' => 'AVARMA.Mode', 'Pos' => 1, 'Writable' => true, 'Default' => true,
+        ];
+        $pos = 2;
+        foreach (self::SETPOINTS as [$ident, $name, $reg, $profile, $min, $max]) {
+            $rows[] = [
+                'Ident' => $ident, 'VarName' => $name, 'Group' => 'Steuerung',
+                'Address' => $this->addrText($reg), 'Range' => $min === null ? 'nur lesen' : "$min … $max",
+                'Type' => VARIABLETYPE_INTEGER, 'Profile' => $profile, 'Pos' => $pos++,
+                'Writable' => $min !== null, 'Default' => true,
+            ];
+        }
+        $pos = 100;
+        foreach ([['Betriebswerte', self::SENSORS], ['Statistik', self::STATS]] as [$group, $defs]) {
+            foreach ($defs as [$ident, $name, $addr, $factor, $profile, $signed]) {
+                $rows[] = [
+                    'Ident' => $ident, 'VarName' => $name, 'Group' => $group,
+                    'Address' => $this->addrText($addr), 'Range' => 'nur lesen',
+                    'Type' => $factor == 1 ? VARIABLETYPE_INTEGER : VARIABLETYPE_FLOAT,
+                    'Profile' => $profile, 'Pos' => $pos++, 'Writable' => false, 'Default' => true,
+                ];
+            }
+        }
+        foreach ([['Parameter', self::PARAMS, true], ['Parameter erweitert', self::PARAMS_EXT, false]] as [$group, $defs, $def]) {
+            foreach ($defs as [$nr, $off, $div, $label, $min, $max]) {
+                $rows[] = [
+                    'Ident' => $this->paramIdent($nr), 'VarName' => sprintf('P%02d %s', $nr, $label), 'Group' => $group,
+                    'Address' => $this->addrText(0x2000 + $off), 'Range' => $min === null ? 'nur lesen' : "$min … $max",
+                    'Type' => $div == 1 ? VARIABLETYPE_INTEGER : VARIABLETYPE_FLOAT,
+                    'Profile' => '', 'Pos' => 1000 + $nr, 'Writable' => $min !== null, 'Default' => $def,
+                ];
+            }
+        }
+        return $rows;
+    }
+
+    /** Drahtadresse hex + 1-basierte Dezimaladresse wie in der Doku */
+    private function addrText(int $addr): string
+    {
+        return sprintf('0x%04X (%d)', $addr, $addr + 1);
+    }
+
+    /** Zeilen fuer die Tabelle (= gespeicherter Property-Inhalt) */
+    private function defaultSelection(): array
+    {
+        $out = [];
+        foreach ($this->catalog() as $r) {
+            $out[] = $this->listRow($r, $r['Default'], false);
+        }
+        return $out;
+    }
+
+    private function listRow(array $r, bool $active, bool $write): array
+    {
+        return [
+            'Active'  => $active,
+            'Name'    => $r['VarName'],
+            'Group'   => $r['Group'],
+            'Address' => $r['Address'],
+            'Range'   => $r['Range'],
+            'Write'   => $r['Writable'] ? $write : false,
+            'Ident'   => $r['Ident'],
+        ];
+    }
+
+    /** Ident => ['Active' => bool, 'Write' => bool]; neue Katalogeintraege mit Standardwert */
+    private function selection(): array
+    {
+        if ($this->selCache !== null) {
+            return $this->selCache;
+        }
+        $stored = [];
+        foreach (json_decode($this->ReadPropertyString('Selection'), true) ?: [] as $row) {
+            if (isset($row['Ident'])) {
+                $stored[$row['Ident']] = $row;
+            }
+        }
+        $sel = [];
+        foreach ($this->catalog() as $r) {
+            $s                 = $stored[$r['Ident']] ?? null;
+            $sel[$r['Ident']] = [
+                'Active' => $s === null ? $r['Default'] : (bool) ($s['Active'] ?? false),
+                'Write'  => $r['Writable'] && $s !== null && (bool) ($s['Write'] ?? false),
+            ];
+        }
+        return $this->selCache = $sel;
+    }
+
+    private function isActive(string $ident): bool
+    {
+        if ($this->ReadPropertyBoolean('EnableControl') && in_array($ident, self::CONTROL_REQUIRED, true)) {
+            return true;
+        }
+        return $this->selection()[$ident]['Active'] ?? false;
+    }
+
+    private function isWrite(string $ident): bool
+    {
+        return $this->selection()[$ident]['Write'] ?? false;
+    }
+
+    private function anyActive(array $paramDefs): bool
+    {
+        foreach ($paramDefs as $def) {
+            if ($this->isActive($this->paramIdent($def[0]))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function GetConfigurationForm()
+    {
+        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $sel  = $this->selection();
+        $rows = [];
+        foreach ($this->catalog() as $r) {
+            $s      = $sel[$r['Ident']];
+            $row    = $this->listRow($r, $s['Active'], $s['Write']);
+            if ($this->ReadPropertyBoolean('EnableControl') && in_array($r['Ident'], self::CONTROL_REQUIRED, true)) {
+                $row['Active']   = true;
+                $row['rowColor'] = '#DFF0D8';   // vom Heizregler belegt
+            }
+            $rows[] = $row;
+        }
+        $this->injectValues($form['elements'], 'Selection', $rows);
+        return json_encode($form);
+    }
+
+    private function injectValues(array &$elements, string $name, array $values): void
+    {
+        foreach ($elements as &$el) {
+            if (($el['name'] ?? '') === $name) {
+                $el['values'] = $values;
+            }
+            if (isset($el['items']) && is_array($el['items'])) {
+                $this->injectValues($el['items'], $name, $values);
+            }
+        }
+    }
+
     private function findParam(int $nr): ?array
     {
         foreach (array_merge(self::PARAMS, self::PARAMS_EXT) as $def) {
@@ -1091,28 +1247,14 @@ class AvarmaHeizregler extends IPSModule
         return null;
     }
 
-    private function setParamAction(array $def): void
-    {
-        $ident = $this->paramIdent($def[0]);
-        if ($this->ReadPropertyBoolean('EnableParamWrite') && $def[4] !== null) {
-            $this->EnableAction($ident);
-        } else {
-            $this->DisableAction($ident);
-        }
-    }
-
     private function applyParams(array $defs, array $raw, array $skip): void
     {
         foreach ($defs as $def) {
             [$nr, $off, $div] = $def;
             $addr  = 0x2000 + $off;
             $ident = $this->paramIdent($nr);
-            if (!isset($raw[$addr]) || in_array($ident, $skip, true)) {
+            if (!isset($raw[$addr]) || in_array($ident, $skip, true) || !$this->isActive($ident)) {
                 continue;
-            }
-            if (@$this->GetIDForIdent($ident) === false || @$this->GetIDForIdent($ident) === 0) {
-                $this->registerTyped($ident, sprintf('P%02d %s', $nr, $def[3]), $div == 1, '', 1000 + $nr);
-                $this->setParamAction($def);
             }
             $v = $this->signed($raw[$addr]);
             $this->SetValue($ident, $div == 1 ? $v : round($v / $div, 3));

@@ -18,14 +18,36 @@
             "items": [
                 { "type": "CheckBox", "name": "EnablePolling", "caption": "Abfrage aktiv (Betriebswerte zyklisch lesen)" },
                 { "type": "NumberSpinner", "name": "PollInterval", "caption": "Abfrageintervall", "suffix": "s", "minimum": 10 },
-                { "type": "CheckBox", "name": "ReadParams", "caption": "Systemparameter P01-P115 lesen" },
                 { "type": "NumberSpinner", "name": "ParamInterval", "caption": "Parameter-Leseintervall", "suffix": "s", "minimum": 60 },
-                { "type": "CheckBox", "name": "ReadParamsExt", "caption": "Erweiterte Parameter P116-P136 lesen (Estrich, PV, OTC-Heizgrenze)" },
-                { "type": "CheckBox", "name": "EnableParamWrite", "caption": "Parameter schreiben erlauben (nur freigegebene, mit Bereichsprüfung)" },
+                { "type": "CheckBox", "name": "EnableParamWrite", "caption": "Parameter schreiben erlauben (Hauptschalter; einzeln in der Tabelle unter \"Schreiben\")" },
                 { "type": "CheckBox", "name": "SyncP01", "caption": "P01 beim Moduswechsel mitschreiben" },
                 { "type": "NumberSpinner", "name": "WriteDelay", "caption": "Schreibverzögerung nach letzter Änderung", "suffix": "s", "minimum": 0 },
                 { "type": "NumberSpinner", "name": "WriteRetries", "caption": "Schreibversuche", "minimum": 1 },
                 { "type": "CheckBox", "name": "EnableControl", "caption": "Heizregler (Sollwertführung P02, Taktsperre, Heizgrenze)" }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Datenpunkte (Auswahl der Variablen)",
+            "items": [
+                { "type": "Label", "caption": "Aktiv = Variable anlegen. Abwählen löscht die Variable samt Archivdaten. Schreiben = Parameter darf aus Symcon geschrieben werden (nur bei Bereich ≠ \"nur lesen\"). Grün = vom Heizregler benötigt, bleibt immer aktiv." },
+                {
+                    "type": "List",
+                    "name": "Selection",
+                    "caption": "Datenpunkte",
+                    "rowCount": 25,
+                    "add": false,
+                    "delete": false,
+                    "columns": [
+                        { "caption": "Aktiv", "name": "Active", "width": "70px", "edit": { "type": "CheckBox" } },
+                        { "caption": "Name", "name": "Name", "width": "auto" },
+                        { "caption": "Gruppe", "name": "Group", "width": "160px" },
+                        { "caption": "Adresse", "name": "Address", "width": "140px" },
+                        { "caption": "Bereich", "name": "Range", "width": "120px" },
+                        { "caption": "Schreiben", "name": "Write", "width": "90px", "edit": { "type": "CheckBox" } },
+                        { "caption": "Ident", "name": "Ident", "width": "170px" }
+                    ]
+                }
             ]
         },
         {
