@@ -2,18 +2,35 @@
     "elements": [
         {
             "type": "ExpansionPanel",
-            "caption": "Verknüpfung",
+            "caption": "Verbindung",
             "expanded": true,
             "items": [
-                { "type": "SelectCategory", "name": "AvarmaCategory", "caption": "Kategorie mit den Avarma-Variablen ($parentID im Modbus-Skript)" },
-                { "type": "SelectVariable", "name": "RoomTempVar", "caption": "Raumtemperatur für Korrektur (optional)" },
-                { "type": "NumberSpinner", "name": "RoomTarget", "caption": "Raum-Zieltemperatur", "suffix": "°C", "digits": 1 },
-                { "type": "NumberSpinner", "name": "Interval", "caption": "Regelintervall", "suffix": "s", "minimum": 30 }
+                { "type": "ValidationTextBox", "name": "Host", "caption": "Modbus-TCP-Gateway (IP)" },
+                { "type": "NumberSpinner", "name": "Port", "caption": "Port" },
+                { "type": "NumberSpinner", "name": "SlaveID", "caption": "Slave-ID (P108)", "minimum": 1, "maximum": 247 },
+                { "type": "NumberSpinner", "name": "Timeout", "caption": "Timeout", "suffix": "s", "minimum": 1 }
             ]
         },
         {
             "type": "ExpansionPanel",
-            "caption": "Heizkurve (Rücklauf-Ziel nach Aussentemperatur)",
+            "caption": "Funktionen",
+            "expanded": true,
+            "items": [
+                { "type": "CheckBox", "name": "EnablePolling", "caption": "Abfrage aktiv (Betriebswerte zyklisch lesen)" },
+                { "type": "NumberSpinner", "name": "PollInterval", "caption": "Abfrageintervall", "suffix": "s", "minimum": 10 },
+                { "type": "CheckBox", "name": "ReadParams", "caption": "Systemparameter P01-P115 lesen" },
+                { "type": "NumberSpinner", "name": "ParamInterval", "caption": "Parameter-Leseintervall", "suffix": "s", "minimum": 60 },
+                { "type": "CheckBox", "name": "ReadParamsExt", "caption": "Erweiterte Parameter P116-P136 lesen (Estrich, PV, OTC-Heizgrenze)" },
+                { "type": "CheckBox", "name": "EnableParamWrite", "caption": "Parameter schreiben erlauben (nur freigegebene, mit Bereichsprüfung)" },
+                { "type": "CheckBox", "name": "SyncP01", "caption": "P01 beim Moduswechsel mitschreiben" },
+                { "type": "NumberSpinner", "name": "WriteDelay", "caption": "Schreibverzögerung nach letzter Änderung", "suffix": "s", "minimum": 0 },
+                { "type": "NumberSpinner", "name": "WriteRetries", "caption": "Schreibversuche", "minimum": 1 },
+                { "type": "CheckBox", "name": "EnableControl", "caption": "Heizregler (Sollwertführung P02, Taktsperre, Heizgrenze)" }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Heizregler: Heizkurve (Rücklauf-Ziel)",
             "items": [
                 { "type": "NumberSpinner", "name": "TaCold", "caption": "Kalter Punkt: Aussentemperatur", "suffix": "°C", "digits": 1 },
                 { "type": "NumberSpinner", "name": "RlCold", "caption": "Kalter Punkt: Rücklauf-Ziel", "suffix": "°C", "digits": 1 },
@@ -28,20 +45,22 @@
         },
         {
             "type": "ExpansionPanel",
-            "caption": "Sollwertführung",
+            "caption": "Heizregler: Raumkorrektur",
             "items": [
-                { "type": "NumberSpinner", "name": "RaiseIntervalMin", "caption": "Anheben bei laufendem Verdichter: höchstens 1 K alle", "suffix": "min" },
-                { "type": "NumberSpinner", "name": "LowerMaxWaitMin", "caption": "Absenkbremse: spätestens 1 K absenken nach", "suffix": "min" },
-                { "type": "NumberSpinner", "name": "CorrStep", "caption": "Raumkorrektur Schrittweite", "suffix": "K", "digits": 1 },
-                { "type": "NumberSpinner", "name": "CorrIntervalMin", "caption": "Raumkorrektur alle", "suffix": "min" },
-                { "type": "NumberSpinner", "name": "CorrMax", "caption": "Raumkorrektur maximal ±", "suffix": "K", "digits": 1 }
+                { "type": "SelectVariable", "name": "RoomTempVar", "caption": "Raumtemperatur (leer = keine Korrektur)" },
+                { "type": "NumberSpinner", "name": "RoomTarget", "caption": "Raum-Zieltemperatur", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "CorrStep", "caption": "Schrittweite", "suffix": "K", "digits": 1 },
+                { "type": "NumberSpinner", "name": "CorrIntervalMin", "caption": "Schritt alle", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "CorrMax", "caption": "Korrektur maximal ±", "suffix": "K", "digits": 1 }
             ]
         },
         {
             "type": "ExpansionPanel",
-            "caption": "Taktsperre",
+            "caption": "Heizregler: Sollwertführung und Taktsperre",
             "items": [
-                { "type": "NumberSpinner", "name": "CycleStarts", "caption": "Sperre auslösen bei Starts", "minimum": 2 },
+                { "type": "NumberSpinner", "name": "RaiseIntervalMin", "caption": "Anheben bei laufendem Verdichter: höchstens 1 K alle", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "LowerMaxWaitMin", "caption": "Absenkbremse: spätestens 1 K absenken nach", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "CycleStarts", "caption": "Taktsperre auslösen bei Starts", "minimum": 2 },
                 { "type": "NumberSpinner", "name": "CycleWindowMin", "caption": "innerhalb von", "suffix": "min" },
                 { "type": "NumberSpinner", "name": "LockMin", "caption": "Sperrdauer", "suffix": "min" },
                 { "type": "NumberSpinner", "name": "BlockSetpoint", "caption": "Sollwert Heizen während Sperre / über Heizgrenze", "suffix": "°C", "minimum": 10, "maximum": 30 }
@@ -49,12 +68,12 @@
         }
     ],
     "actions": [
-        { "type": "Button", "caption": "Jetzt regeln", "onClick": "AVHR_Control($id);" },
+        { "type": "Button", "caption": "Jetzt abfragen", "onClick": "AVHR_Update($id);" },
+        { "type": "Button", "caption": "Parameter jetzt lesen", "onClick": "AVHR_ReadParameters($id);" },
         { "type": "Button", "caption": "Taktsperre aufheben", "onClick": "AVHR_ResetLock($id);" }
     ],
     "status": [
-        { "code": 102, "icon": "active", "caption": "Regler bereit" },
-        { "code": 201, "icon": "error", "caption": "Kategorie nicht gesetzt oder nicht vorhanden" },
-        { "code": 202, "icon": "error", "caption": "Avarma-Variablen fehlen in der Kategorie (Modbus-Skript einmal mit readParams = true ausführen)" }
+        { "code": 102, "icon": "active", "caption": "Bereit" },
+        { "code": 201, "icon": "error", "caption": "Keine Gateway-Adresse eingetragen" }
     ]
 }
