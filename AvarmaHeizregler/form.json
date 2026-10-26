@@ -1,0 +1,60 @@
+{
+    "elements": [
+        {
+            "type": "ExpansionPanel",
+            "caption": "Verknüpfung",
+            "expanded": true,
+            "items": [
+                { "type": "SelectCategory", "name": "AvarmaCategory", "caption": "Kategorie mit den Avarma-Variablen ($parentID im Modbus-Skript)" },
+                { "type": "SelectVariable", "name": "RoomTempVar", "caption": "Raumtemperatur für Korrektur (optional)" },
+                { "type": "NumberSpinner", "name": "RoomTarget", "caption": "Raum-Zieltemperatur", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "Interval", "caption": "Regelintervall", "suffix": "s", "minimum": 30 }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Heizkurve (Rücklauf-Ziel nach Aussentemperatur)",
+            "items": [
+                { "type": "NumberSpinner", "name": "TaCold", "caption": "Kalter Punkt: Aussentemperatur", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "RlCold", "caption": "Kalter Punkt: Rücklauf-Ziel", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "TaWarm", "caption": "Warmer Punkt: Aussentemperatur", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "RlWarm", "caption": "Warmer Punkt: Rücklauf-Ziel", "suffix": "°C", "digits": 1 },
+                { "type": "NumberSpinner", "name": "Offset", "caption": "Parallelverschiebung", "suffix": "K", "digits": 1 },
+                { "type": "NumberSpinner", "name": "SpreadFallback", "caption": "Spreizung, solange noch nicht gemessen", "suffix": "K", "digits": 1 },
+                { "type": "NumberSpinner", "name": "FlowMin", "caption": "Vorlauf-Sollwert minimal", "suffix": "°C" },
+                { "type": "NumberSpinner", "name": "FlowMax", "caption": "Vorlauf-Sollwert maximal", "suffix": "°C" },
+                { "type": "NumberSpinner", "name": "HeatLimit", "caption": "Heizgrenze (1-h-Mittel Aussentemperatur)", "suffix": "°C", "digits": 1 }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Sollwertführung",
+            "items": [
+                { "type": "NumberSpinner", "name": "RaiseIntervalMin", "caption": "Anheben bei laufendem Verdichter: höchstens 1 K alle", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "LowerMaxWaitMin", "caption": "Absenkbremse: spätestens 1 K absenken nach", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "CorrStep", "caption": "Raumkorrektur Schrittweite", "suffix": "K", "digits": 1 },
+                { "type": "NumberSpinner", "name": "CorrIntervalMin", "caption": "Raumkorrektur alle", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "CorrMax", "caption": "Raumkorrektur maximal ±", "suffix": "K", "digits": 1 }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Taktsperre",
+            "items": [
+                { "type": "NumberSpinner", "name": "CycleStarts", "caption": "Sperre auslösen bei Starts", "minimum": 2 },
+                { "type": "NumberSpinner", "name": "CycleWindowMin", "caption": "innerhalb von", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "LockMin", "caption": "Sperrdauer", "suffix": "min" },
+                { "type": "NumberSpinner", "name": "BlockSetpoint", "caption": "Sollwert Heizen während Sperre / über Heizgrenze", "suffix": "°C", "minimum": 10, "maximum": 30 }
+            ]
+        }
+    ],
+    "actions": [
+        { "type": "Button", "caption": "Jetzt regeln", "onClick": "AVHR_Control($id);" },
+        { "type": "Button", "caption": "Taktsperre aufheben", "onClick": "AVHR_ResetLock($id);" }
+    ],
+    "status": [
+        { "code": 102, "icon": "active", "caption": "Regler bereit" },
+        { "code": 201, "icon": "error", "caption": "Kategorie nicht gesetzt oder nicht vorhanden" },
+        { "code": 202, "icon": "error", "caption": "Avarma-Variablen fehlen in der Kategorie (Modbus-Skript einmal mit readParams = true ausführen)" }
+    ]
+}

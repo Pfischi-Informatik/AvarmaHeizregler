@@ -1,0 +1,13 @@
+{
+    "id": "{82128079-0B25-4D3F-96BD-607CA5C04CF9}",
+    "name": "AvarmaHeizregler",
+    "type": 3,
+    "vendor": "Hofman",
+    "aliases": [
+        "Avarma Heizregler"
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "AVHR"
+}
