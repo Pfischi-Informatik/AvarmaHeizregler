@@ -311,6 +311,9 @@ class AvarmaHeizregler extends IPSModule
     {
         parent::ApplyChanges();
         $this->selCache = null;
+        if ($this->normalizeSelection()) {
+            return;   // ApplyChanges laeuft mit der bereinigten Tabelle erneut
+        }
 
         $this->ensureProfiles();
 
@@ -1171,6 +1174,7 @@ class AvarmaHeizregler extends IPSModule
             'Address' => $r['Address'],
             'Range'   => $r['Range'],
             'Write'   => $r['Writable'] ? $write : false,
+            'Note'    => in_array($r['Ident'], self::CONTROL_REQUIRED, true) ? 'Heizregler: immer aktiv' : '',
             'Ident'   => $r['Ident'],
         ];
     }
@@ -1221,34 +1225,36 @@ class AvarmaHeizregler extends IPSModule
         return false;
     }
 
-    public function GetConfigurationForm()
+    /**
+     * Gespeicherte Tabelle mit dem Katalog abgleichen (neue/entfernte
+     * Datenpunkte nach einem Modulupdate). Die Tabelle wird von Symcon aus
+     * der Property gefuellt - deshalb wird sie hier und NICHT per
+     * GetConfigurationForm befuellt (sonst speichert Symcon Aenderungen nicht).
+     * Liefert true, wenn die Property angepasst und neu uebernommen wurde.
+     */
+    private function normalizeSelection(): bool
     {
-        $form = json_decode(file_get_contents(__DIR__ . '/form.json'), true);
+        $stored = json_decode($this->ReadPropertyString('Selection'), true) ?: [];
+        $have   = array_column($stored, 'Ident');
+        $want   = array_column($this->catalog(), 'Ident');
+        $noteOk = true;
+        foreach ($stored as $row) {
+            if (!array_key_exists('Note', $row)) {
+                $noteOk = false;
+                break;
+            }
+        }
+        if ($have === $want && $noteOk) {
+            return false;
+        }
         $sel  = $this->selection();
         $rows = [];
         foreach ($this->catalog() as $r) {
-            $s      = $sel[$r['Ident']];
-            $row    = $this->listRow($r, $s['Active'], $s['Write']);
-            if ($this->ReadPropertyBoolean('EnableControl') && in_array($r['Ident'], self::CONTROL_REQUIRED, true)) {
-                $row['Active']   = true;
-                $row['rowColor'] = '#DFF0D8';   // vom Heizregler belegt
-            }
-            $rows[] = $row;
+            $rows[] = $this->listRow($r, $sel[$r['Ident']]['Active'], $sel[$r['Ident']]['Write']);
         }
-        $this->injectValues($form['elements'], 'Selection', $rows);
-        return json_encode($form);
-    }
-
-    private function injectValues(array &$elements, string $name, array $values): void
-    {
-        foreach ($elements as &$el) {
-            if (($el['name'] ?? '') === $name) {
-                $el['values'] = $values;
-            }
-            if (isset($el['items']) && is_array($el['items'])) {
-                $this->injectValues($el['items'], $name, $values);
-            }
-        }
+        IPS_SetProperty($this->InstanceID, 'Selection', json_encode($rows));
+        IPS_ApplyChanges($this->InstanceID);
+        return true;
     }
 
     private function findParam(int $nr): ?array
