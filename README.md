@@ -10,10 +10,10 @@ Benoetigt **IP-Symcon >= 6.0** und ein Modbus-TCP-Gateway an der Waermepumpe
 
 ## Installation
 
-1. Repository in den Symcon-Modulordner klonen bzw. kopieren, so dass
-   `modules/AvarmaHeizregler/library.json` direkt darin liegt
-   (macOS: `/Library/Application Support/Symcon/modules/`).
-2. Symcon-Dienst neu starten.
+1. In Symcon: Modulverwaltung (Kern-Instanzen -> Modules) -> `+` ->
+   `https://github.com/Pfischi-Informatik/AvarmaHeizregler`
+2. Alternativ das Repository nach `<Symcon>/modules/AvarmaHeizregler/` kopieren
+   und den Symcon-Dienst neu starten.
 3. Instanz anlegen: `AvarmaHeizregler` (Hersteller: Hofman).
 4. Gateway-IP, Port und Slave-ID (P108 an der Waermepumpe) eintragen, uebernehmen.
 5. **Jetzt abfragen** druecken; die Variable "Verbindung OK" muss an sein.
